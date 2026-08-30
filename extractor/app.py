@@ -164,7 +164,8 @@ def load_roster(xlsx_path: str, name_col: str = "", email_col: str = "") -> dict
             name  = str(row[ni]).strip() if row[ni] else ""
             email = str(row[ei]).strip() if row[ei] else ""
             if name and email and name.lower() != "none":
-                roster[name.title()] = {"email": email, "supervisor_name": sup_name.title() if sup_name else "", "supervisor_email": sup_email}
+                clean_sup = re.sub(r'^(prof\.?\s+|dr\.?\s+)+', '', sup_name, flags=re.IGNORECASE).strip()
+                roster[name.title()] = {"email": email, "supervisor_name": clean_sup.title() if clean_sup else "", "supervisor_email": sup_email}
     _roster_cache[xlsx_path] = roster
     return roster
 
