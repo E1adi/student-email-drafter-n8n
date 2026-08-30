@@ -214,6 +214,15 @@ def extract_name():
     names = result.get("names") or []
     if isinstance(names, str):
         names = [n.strip() for n in names.split(",") if n.strip()]
+    # Vision fallback: if LLM returned no names and we haven't tried image yet, retry with page image
+    if not names and image_b64 is None:
+        app.logger.info("extract-name: no names from text, retrying with vision fallback")
+        image_b64 = page1_to_base64(file_path)
+        if image_b64:
+            result = gpt_extract_name(text, image_b64=image_b64)
+            names = result.get("names") or []
+            if isinstance(names, str):
+                names = [n.strip() for n in names.split(",") if n.strip()]
     return jsonify({
         "name": names[0] if names else "",
         "names": names,
