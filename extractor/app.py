@@ -249,11 +249,14 @@ def find_review():
 
 
 @app.get("/download-review")
-def download_review():
-    """Serve a review file for n8n to pick up as binary attachment."""
+@app.get("/download-assignment")
+def download_assignment():
+    """Serve an assignment file for n8n to attach to Gmail draft."""
     file_path = request.args.get("path")
+    app.logger.info(f"download-assignment: path={file_path!r}")
     if not file_path or not Path(file_path).exists():
-        return jsonify({"error": "not found"}), 404
+        app.logger.error(f"download-assignment: NOT FOUND path={file_path!r}")
+        return jsonify({"error": f"not found: {file_path}"}), 404
     return send_file(file_path, as_attachment=True, download_name=Path(file_path).name)
 
 

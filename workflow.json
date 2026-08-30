@@ -99,35 +99,7 @@
     },
     {
       "parameters": {
-        "url": "http://extractor:5050/find-review",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "name",
-              "value": "={{ $json.matched_name }}"
-            },
-            {
-              "name": "reviews_dir",
-              "value": "/data/files/reviews"
-            }
-          ]
-        },
-        "options": {},
-        "method": "POST"
-      },
-      "id": "find-review",
-      "name": "Find Review File",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1160,
-        340
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const names       = $('Match Roster').item.json.matched_names || [$('Match Roster').item.json.matched_name];\nconst emails       = $('Match Roster').item.json.to;\nconst supervisor   = $('Match Roster').item.json.supervisor_name || '';\nconst fullNames    = names.join(' & ');\nconst firstName    = names[0].split(' ')[0];\nconst reviewPath   = $('Find Review File').item.json.path;\nconst paperTitle   = $('Extract Name (GPT)').item.json.paper_title || '';\nconst raw          = $('Get Template').item.json.template;\n\nif (!emails) throw new Error('to empty \u2014 Match Roster: ' + JSON.stringify($('Match Roster').item.json));\n\n// Apply placeholders to raw markdown\nconst filled = raw\n  .replace(/{{name}}/g, firstName)\n  .replace(/{{full_name}}/g, fullNames)\n  .replace(/{{paper_title}}/g, paperTitle)\n  .replace(/{{supervisor}}/g, supervisor);\n\n// Split Subject line from body\nconst lines     = filled.split('\\n');\nconst bodyStart = lines.findIndex(l => l.trim() === '') + 1;\nconst subject   = lines[0].replace(/^Subject:\\s*/i, '').trim();\nconst bodyMd    = lines.slice(bodyStart).join('\\n').trim();\n\nreturn { to: emails, subject, bodyMd, reviewPath, fullNames, paperTitle, supervisor };\n",
+        "jsCode": "const names       = $('Match Roster').item.json.matched_names || [$('Match Roster').item.json.matched_name];\nconst emails       = $('Match Roster').item.json.to;\nconst supervisor   = $('Match Roster').item.json.supervisor_name || '';\nconst fullNames    = names.join(' & ');\nconst firstName    = names[0].split(' ')[0];\nconst reviewPath   = $('Split Files').item.json.pdf_path;\nconst paperTitle   = $('Extract Name (GPT)').item.json.paper_title || '';\nconst raw          = $('Get Template').item.json.template;\n\nif (!emails) throw new Error('to empty \u2014 Match Roster: ' + JSON.stringify($('Match Roster').item.json));\n\n// Apply placeholders to raw markdown\nconst filled = raw\n  .replace(/{{name}}/g, firstName)\n  .replace(/{{full_name}}/g, fullNames)\n  .replace(/{{paper_title}}/g, paperTitle)\n  .replace(/{{supervisor}}/g, supervisor);\n\n// Split Subject line from body\nconst lines     = filled.split('\\n');\nconst bodyStart = lines.findIndex(l => l.trim() === '') + 1;\nconst subject   = lines[0].replace(/^Subject:\\s*/i, '').trim();\nconst bodyMd    = lines.slice(bodyStart).join('\\n').trim();\n\nreturn { to: emails, subject, bodyMd, reviewPath, fullNames, paperTitle, supervisor };\n",
         "mode": "runOnceForEachItem"
       },
       "id": "build-email",
@@ -189,7 +161,7 @@
     },
     {
       "id": "download-review-node",
-      "name": "Download Review File",
+      "name": "Download Assignment File",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -348,17 +320,6 @@
       "main": [
         [
           {
-            "node": "Find Review File",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find Review File": {
-      "main": [
-        [
-          {
             "node": "Get Template",
             "type": "main",
             "index": 0
@@ -388,17 +349,6 @@
         ]
       ]
     },
-    "Download Review File": {
-      "main": [
-        [
-          {
-            "node": "Create Gmail Draft",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Clear Cache": {
       "main": [
         [
@@ -414,7 +364,18 @@
       "main": [
         [
           {
-            "node": "Download Review File",
+            "node": "Download Assignment File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Assignment File": {
+      "main": [
+        [
+          {
+            "node": "Create Gmail Draft",
             "type": "main",
             "index": 0
           }
