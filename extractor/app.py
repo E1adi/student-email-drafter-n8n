@@ -70,16 +70,46 @@ def extract_name_from_filename(file_path: str) -> str:
     return m.group(1).strip() if m else stem.split('_')[0].strip()
 
 
-def gpt_extract_name(text: str) -> dict:
+def page1_to_base64(file_path: str) -> str | None:
+    """Render first page of PDF or DOCX to a base64 PNG for vision fallback."""
+    import base64, tempfile
+    path = Path(file_path)
+    try:
+        if path.suffix.lower() == ".docx":
+            # pymupdf can open docx directly since 1.23
+            doc = pymupdf.open(str(path))
+        else:
+            doc = pymupdf.open(str(path))
+        if not doc.page_count:
+            return None
+        pix = doc[0].get_pixmap(dpi=150)
+        doc.close()
+        return base64.b64encode(pix.tobytes("png")).decode()
+    except Exception as e:
+        app.logger.warning(f"page1_to_base64 failed: {e}")
+        return None
+
+
+def gpt_extract_name(text: str, image_b64: str | None = None) -> dict:
+    system_msg = (
+        "You are a document parser. Extract student names and paper title from the content. "
+        "Return ONLY valid JSON: {\"names\": [...], \"paper_title\": \"...\"}. No markdown fences."
+    )
+    if image_b64:
+        user_content = [
+            {"type": "text", "text": "Extract student full names and paper title from this cover page image."},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+        ]
+        if text:
+            user_content[0]["text"] += f"\n\nAlso available as text:\n{text[:500]}"
+    else:
+        user_content = f"Document text:\n\n{text[:2000]}"
+
     resp = client.chat.completions.create(
         model=os.environ.get("LLM_MODEL", "gpt-4o-mini"),
         messages=[
-            {"role": "system", "content":
-                "You are a document parser. Read the document text and return a JSON object with these fields:\n"
-                "  names: list of student full names\n"
-                "  paper_title: the title of the paper/project (empty string if not found)\n"
-                "Return ONLY valid JSON, no explanation, no markdown fences."},
-            {"role": "user", "content": f"Document text:\n\n{text[:2000]}"},
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_content},
         ],
         max_tokens=150,
         temperature=0,
@@ -92,7 +122,6 @@ def gpt_extract_name(text: str) -> dict:
     try:
         return json.loads(content)
     except Exception:
-        # Fallback: treat whole response as a name list (backward compat)
         return {"names": [n.strip() for n in content.split(",") if n.strip()],
                 "paper_title": ""}
 
@@ -177,7 +206,11 @@ def extract_name():
     if not file_path or not Path(file_path).exists():
         return jsonify({"error": f"File not found: {file_path}"}), 400
     text = file_to_text(file_path)
-    result = gpt_extract_name(text)
+    # ponytail: 100-char threshold; if cover page is an image, text will be near-empty
+    image_b64 = page1_to_base64(file_path) if len(text.strip()) < 100 else None
+    if image_b64:
+        app.logger.info(f"extract-name: text too short ({len(text)} chars), using vision fallback")
+    result = gpt_extract_name(text, image_b64=image_b64)
     names = result.get("names") or []
     if isinstance(names, str):
         names = [n.strip() for n in names.split(",") if n.strip()]
