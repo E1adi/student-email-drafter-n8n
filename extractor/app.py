@@ -142,8 +142,12 @@ def load_roster(xlsx_path: str, name_col: str = "", email_col: str = "") -> dict
 
 def fuzzy_best(query: str, candidates: list[str], threshold: int = 65, scorer=None) -> str | None:
     scorer = scorer or fuzz.token_sort_ratio
-    result = process.extractOne(query, candidates, scorer=scorer)
-    return result[0] if result and result[1] >= threshold else None
+    q = query.lower()
+    lower_map = {c.lower(): c for c in candidates}
+    result = process.extractOne(q, list(lower_map.keys()), scorer=scorer)
+    if result and result[1] >= threshold:
+        return lower_map[result[0]]
+    return None
 
 
 # ── routes ─────────────────────────────────────────────────────────────────────
