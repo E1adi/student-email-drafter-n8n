@@ -1,0 +1,28 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Jerusalem
+      - N8N_ENABLE_BUILTIN_OAUTH_CREDENTIALS=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ${FILES_DIR:-./files}:/data/files   # assignments/, reviews/, roster.xlsx land here
+    depends_on:
+      - extractor
+
+  extractor:
+    build: ./extractor
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-models/gemini-3.5-flash-lite}
+    volumes:
+      - ${FILES_DIR:-./files}:/data/files
+
+volumes:
+  n8n_data:

@@ -1,0 +1,7 @@
+flask
+pymupdf
+openai
+rapidfuzz
+openpyxl
+python-docx
+markdown

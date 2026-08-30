@@ -1,0 +1,411 @@
+{
+  "id": "student-review-drafter",
+  "name": "Student Review Email Drafter",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://extractor:5050/list-assignments",
+        "options": {}
+      },
+      "id": "list-pdfs",
+      "name": "List Assignments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        100,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $json.files.map(f => ({ json: { pdf_path: f } }));"
+      },
+      "id": "split-files",
+      "name": "Split Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://extractor:5050/extract-name",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "pdf_path",
+              "value": "={{ $json.pdf_path }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-name",
+      "name": "Extract Name (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://extractor:5050/match-roster",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.name }}"
+            },
+            {
+              "name": "names",
+              "value": "={{ JSON.stringify($json.names) }}"
+            },
+            {
+              "name": "roster_path",
+              "value": "/data/files/roster.xlsx"
+            }
+          ]
+        },
+        "options": {},
+        "method": "POST"
+      },
+      "id": "match-roster",
+      "name": "Match Roster",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        940,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://extractor:5050/find-review",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ $json.matched_name }}"
+            },
+            {
+              "name": "reviews_dir",
+              "value": "/data/files/reviews"
+            }
+          ]
+        },
+        "options": {},
+        "method": "POST"
+      },
+      "id": "find-review",
+      "name": "Find Review File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const names       = $('Match Roster').item.json.matched_names || [$('Match Roster').item.json.matched_name];\nconst emails       = $('Match Roster').item.json.to;\nconst supervisor   = $('Match Roster').item.json.supervisor_name || '';\nconst fullNames    = names.join(' & ');\nconst firstName    = names[0].split(' ')[0];\nconst reviewPath   = $('Find Review File').item.json.path;\nconst paperTitle   = $('Extract Name (GPT)').item.json.paper_title || '';\nconst raw          = $('Get Template').item.json.template;\n\nif (!emails) throw new Error('to empty \u2014 Match Roster: ' + JSON.stringify($('Match Roster').item.json));\n\n// Apply placeholders to raw markdown\nconst filled = raw\n  .replace(/{{name}}/g, firstName)\n  .replace(/{{full_name}}/g, fullNames)\n  .replace(/{{paper_title}}/g, paperTitle)\n  .replace(/{{supervisor}}/g, supervisor);\n\n// Split Subject line from body\nconst lines     = filled.split('\\n');\nconst bodyStart = lines.findIndex(l => l.trim() === '') + 1;\nconst subject   = lines[0].replace(/^Subject:\\s*/i, '').trim();\nconst bodyMd    = lines.slice(bodyStart).join('\\n').trim();\n\nreturn { to: emails, subject, bodyMd, reviewPath, fullNames, paperTitle, supervisor };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "build-email",
+      "name": "Build Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "={{ $('Build Email').item.json.subject }}",
+        "emailType": "html",
+        "message": "={{ $('MD to HTML').item.json.bodyHtml }}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "data"
+              }
+            ]
+          },
+          "sendTo": "={{ $('Build Email').item.json.to }}"
+        }
+      },
+      "id": "gmail-draft",
+      "name": "Create Gmail Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2440,
+        340
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail Account"
+        }
+      }
+    },
+    {
+      "id": "get-template-node",
+      "name": "Get Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        340
+      ],
+      "parameters": {
+        "url": "http://extractor:5050/get-template",
+        "method": "GET",
+        "options": {}
+      }
+    },
+    {
+      "id": "download-review-node",
+      "name": "Download Review File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        340
+      ],
+      "parameters": {
+        "url": "=http://extractor:5050/download-review?path={{ $('Build Email').item.json.reviewPath }}",
+        "method": "GET",
+        "responseFormat": "file",
+        "options": {}
+      }
+    },
+    {
+      "id": "a4e1d971-ced2-4b99-b598-b28baee74bea",
+      "name": "Clear Cache",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        340
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://extractor:5050/clear-cache",
+        "options": {}
+      }
+    },
+    {
+      "id": "69cada1d-f2e3-423a-bdb7-dd7aad0f6c75",
+      "name": "MD to HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        340
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const md = $json.bodyMd || '';\n\n// Split into paragraphs (blank-line separated)\nconst paras = md.split(/\\n{2,}/);\nlet html = paras.map(para => {\n  // Within a para, trailing-2-space or \\\\ = <br>\n  const inner = para\n    .replace(/  \\n/g, '<br>')\n    .replace(/\\\\\\n/g, '<br>')\n    .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')\n    .replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href=\"$2\">$1</a>')\n    .replace(/\\n/g, ' ');\n  return `<p>${inner}</p>`;\n}).join('\\n');\n\nreturn { ...$json, bodyHtml: html };\n"
+      }
+    },
+    {
+      "id": "3c8cebc2-f25b-4088-a542-25fd53ab700f",
+      "name": "\ud83d\udcc2 Discover",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -500,
+        180
+      ],
+      "parameters": {
+        "content": "## \ud83d\udcc2 Discover\nTrigger \u2192 clear cache \u2192 list assignment files \u2192 one item per file.",
+        "height": 340,
+        "width": 980,
+        "color": 5
+      }
+    },
+    {
+      "id": "89787fd5-a7b1-45d7-969c-e04559f82106",
+      "name": "\ud83d\udd0d Identify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        560,
+        180
+      ],
+      "parameters": {
+        "content": "## \ud83d\udd0d Identify\nExtract names + title \u2192 match supervisor email from roster \u2192 find review file.",
+        "height": 340,
+        "width": 760,
+        "color": 4
+      }
+    },
+    {
+      "id": "3792e6ab-57d8-4211-9b1a-7e2342f60829",
+      "name": "\u2709\ufe0f Compose",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        180
+      ],
+      "parameters": {
+        "content": "## \u2709\ufe0f Compose\nFetch template \u2192 build email \u2192 render MD to HTML \u2192 attach review \u2192 save Gmail draft.",
+        "height": 340,
+        "width": 1200,
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "Run Manually": {
+      "main": [
+        [
+          {
+            "node": "Clear Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Assignments": {
+      "main": [
+        [
+          {
+            "node": "Split Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Name (GPT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Name (GPT)": {
+      "main": [
+        [
+          {
+            "node": "Match Roster",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Roster": {
+      "main": [
+        [
+          {
+            "node": "Find Review File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Review File": {
+      "main": [
+        [
+          {
+            "node": "Get Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email": {
+      "main": [
+        [
+          {
+            "node": "MD to HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Template": {
+      "main": [
+        [
+          {
+            "node": "Build Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Review File": {
+      "main": [
+        [
+          {
+            "node": "Create Gmail Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Cache": {
+      "main": [
+        [
+          {
+            "node": "List Assignments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MD to HTML": {
+      "main": [
+        [
+          {
+            "node": "Download Review File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": []
+}
