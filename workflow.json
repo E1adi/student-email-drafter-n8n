@@ -62,7 +62,8 @@
       "position": [
         720,
         340
-      ]
+      ],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -278,6 +279,17 @@
         "width": 1200,
         "color": 3
       }
+    },
+    {
+      "id": "88db3b86-a366-4439-aba7-a1bd9d3ea953",
+      "name": "Skip (extract failed)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        540
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -319,6 +331,13 @@
         [
           {
             "node": "Match Roster",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip (extract failed)",
             "type": "main",
             "index": 0
           }
